@@ -1,5 +1,5 @@
 // VoxTube Service Worker — Caché de assets estáticos
-const CACHE_NAME = "voxtube-v2";
+const CACHE_NAME = "voxtube-v3";
 const STATIC_ASSETS = [
   "/",
   "/index.html",
