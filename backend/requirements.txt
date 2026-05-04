@@ -1,6 +1,6 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.0
-yt-dlp>=2024.0.0
+yt-dlp>=2025.0.0
 openai-whisper
 deep-translator==1.11.4
 edge-tts>=7.2.0
