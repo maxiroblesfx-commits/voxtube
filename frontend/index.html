@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#6C63FF" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <title>VoxTube — Traducí videos de YouTube a cualquier idioma</title>
+  <meta name="description" content="Traduce videos de YouTube a tu idioma con voz sintetizada de alta calidad. Gratis, desde tu celular." />
+
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="app">
+
+    <!-- ─── Header ─── -->
+    <header class="header">
+      <div class="header__logo">
+        <div class="header__icon">🌐</div>
+        <h1 class="header__title">VoxTube</h1>
+      </div>
+      <p class="header__subtitle">Traducí cualquier video de YouTube a tu idioma</p>
+    </header>
+
+    <!-- ─── PWA Install Banner ─── -->
+    <div id="install-banner" class="install-banner">
+      <span>📲 Instalá VoxTube en tu celular</span>
+      <button id="btn-install">Instalar</button>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!--  VIEW: HOME                                        -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <main id="view-home" class="view active">
+      <div class="glass-card" style="animation-delay: 0.15s;">
+
+        <!-- URL Input -->
+        <div class="url-input-wrapper">
+          <span class="url-input-wrapper__icon">▶</span>
+          <label for="url-input" class="sr-only">URL del video de YouTube</label>
+          <input
+            type="url"
+            id="url-input"
+            class="url-input"
+            placeholder="Pegá el link del video de YouTube..."
+            autocomplete="off"
+            inputmode="url"
+          />
+        </div>
+
+        <!-- Language Select -->
+        <div class="lang-select-wrapper">
+          <label for="lang-select">Traducir a</label>
+          <select id="lang-select" class="lang-select">
+            <option value="es">Español</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+
+        <!-- Gender Select -->
+        <div class="lang-select-wrapper">
+          <label for="gender-select">Voz</label>
+          <select id="gender-select" class="lang-select">
+            <option value="female">Femenina</option>
+            <option value="male">Masculina</option>
+          </select>
+        </div>
+
+        <!-- CTA Button -->
+        <button id="btn-translate" class="btn-primary">
+          🎬 Traducir Video
+        </button>
+
+        <!-- Error Message -->
+        <div id="error-msg" class="error-msg"></div>
+      </div>
+
+      <!-- History -->
+      <section id="history-section" class="history-section" style="display: none;">
+        <h2 class="history-section__title">Recientes</h2>
+        <div id="history-list" class="history-list"></div>
+      </section>
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!--  VIEW: PROCESSING                                  -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div id="view-processing" class="view">
+      <div class="glass-card processing-card">
+        <img id="proc-thumbnail" class="processing-card__thumbnail" src="" alt="Thumbnail del video" style="display:none;" />
+        <p id="proc-title" class="processing-card__title">Preparando traducción...</p>
+
+        <div class="progress-bar">
+          <div id="progress-fill" class="progress-bar__fill" style="width: 0%"></div>
+        </div>
+
+        <div class="progress-info">
+          <span id="progress-step" class="progress-info__step">En cola...</span>
+          <span id="progress-pct" class="progress-info__pct">0%</span>
+        </div>
+
+        <ul class="steps-list">
+          <li class="steps-list__item" data-step="downloading">
+            <span class="step-icon">○</span>
+            <span>Descargando audio del video</span>
+          </li>
+          <li class="steps-list__item" data-step="transcribing">
+            <span class="step-icon">○</span>
+            <span>Transcribiendo voz original</span>
+          </li>
+          <li class="steps-list__item" data-step="translating">
+            <span class="step-icon">○</span>
+            <span>Traduciendo texto</span>
+          </li>
+          <li class="steps-list__item" data-step="synthesizing">
+            <span class="step-icon">○</span>
+            <span>Generando voz traducida</span>
+          </li>
+          <li class="steps-list__item" data-step="mixing">
+            <span class="step-icon">○</span>
+            <span>Mezclando audio final</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!--  VIEW: PLAYER                                      -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div id="view-player" class="view">
+      <div class="player-section">
+
+        <!-- Video -->
+        <div id="video-container" class="video-container"></div>
+
+        <!-- Info -->
+        <div class="player-info">
+          <h2 id="player-title" class="player-info__title">Video traducido</h2>
+          <p id="player-meta" class="player-info__meta"></p>
+        </div>
+
+        <!-- Audio Controls -->
+        <div id="audio-controls-container"></div>
+
+        <!-- Actions -->
+        <div class="player-actions">
+          <button id="btn-new-video" class="btn-secondary">🔄 Nuevo video</button>
+          <button id="btn-download" class="btn-secondary">⬇ Descargar audio</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
