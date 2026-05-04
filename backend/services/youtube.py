@@ -52,9 +52,10 @@ def extract_audio(url: str, job_id: str) -> dict:
         # Bypass bot detection
         "noprogress": True,
         "youtube_include_dash_manifest": False,
+        "cookiefile": "cookies.txt",  # Forzado en el root del Docker
         "extractor_args": {
             "youtube": {
-                "player_client": ["ios"],
+                "player_client": ["android", "ios", "web_embedded", "tv"],
                 "skip": ["dash", "hls"],
             }
         },
