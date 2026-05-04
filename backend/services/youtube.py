@@ -52,6 +52,11 @@ def extract_audio(url: str, job_id: str) -> dict:
         # Bypass bot detection
         "noprogress": True,
         "cookiefile": "cookies.txt",  # Forzado en el root del Docker
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "ios", "web_creator", "web"],
+            }
+        },
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
