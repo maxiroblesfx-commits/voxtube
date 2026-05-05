@@ -4,3 +4,4 @@ deep-translator==1.11.4
 edge-tts>=7.2.0
 python-multipart==0.0.9
 pydub
+pytubefix
