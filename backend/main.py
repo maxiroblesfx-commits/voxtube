@@ -237,3 +237,78 @@ def delete_job(job_id: str):
 def health():
     """Health check para Render."""
     return {"status": "ok", "service": "VoxTube API"}
+
+
+@app.get("/api/debug-download")
+def debug_download():
+    """Diagnóstico: prueba cada método de descarga y reporta qué funciona."""
+    import json as json_mod
+    from urllib.request import Request, urlopen
+
+    video_id = "dQw4w9WgXcQ"  # Rick Astley - video de prueba
+    results = {}
+
+    # Test 1: ¿Podemos resolver DNS de Piped?
+    try:
+        import socket
+        ip = socket.getaddrinfo("api.piped.private.coffee", 443)[0][4][0]
+        results["1_dns_piped"] = f"OK - IP: {ip}"
+    except Exception as e:
+        results["1_dns_piped"] = f"FAIL - {str(e)[:100]}"
+
+    # Test 2: ¿Podemos obtener metadata de Piped?
+    piped_data = None
+    try:
+        req = Request(f"https://api.piped.private.coffee/streams/{video_id}")
+        req.add_header("User-Agent", "Mozilla/5.0")
+        with urlopen(req, timeout=15) as resp:
+            piped_data = json_mod.loads(resp.read().decode())
+        results["2_piped_metadata"] = f"OK - Title: {piped_data.get('title', '?')[:50]}"
+    except Exception as e:
+        results["2_piped_metadata"] = f"FAIL - {str(e)[:100]}"
+
+    # Test 3: ¿Qué URLs de audio streams nos da Piped?
+    if piped_data:
+        streams = piped_data.get("audioStreams", [])
+        results["3_audio_streams_count"] = len(streams)
+        if streams:
+            best = streams[0]
+            stream_url = best.get("url", "")
+            results["3_first_stream_url_preview"] = stream_url[:120] + "..."
+            results["3_first_stream_type"] = best.get("mimeType", best.get("type", "?"))
+
+            # Test 4: ¿Podemos descargar los primeros bytes del audio?
+            try:
+                req2 = Request(stream_url)
+                req2.add_header("User-Agent", "Mozilla/5.0")
+                req2.add_header("Range", "bytes=0-1023")
+                with urlopen(req2, timeout=15) as resp2:
+                    chunk = resp2.read(1024)
+                    results["4_audio_download"] = f"OK - Got {len(chunk)} bytes, status={resp2.status}"
+            except Exception as e:
+                results["4_audio_download"] = f"FAIL - {str(e)[:150]}"
+    else:
+        results["3_audio_streams_count"] = "SKIP (metadata failed)"
+        results["4_audio_download"] = "SKIP"
+
+    # Test 5: ¿Podemos llegar a YouTube oEmbed?
+    try:
+        req3 = Request(f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json")
+        req3.add_header("User-Agent", "Mozilla/5.0")
+        with urlopen(req3, timeout=10) as resp3:
+            oembed = json_mod.loads(resp3.read().decode())
+        results["5_youtube_oembed"] = f"OK - {oembed.get('title', '?')[:50]}"
+    except Exception as e:
+        results["5_youtube_oembed"] = f"FAIL - {str(e)[:100]}"
+
+    # Test 6: ¿Podemos llegar a las instancias dinámicas de Piped?
+    try:
+        req4 = Request("https://piped-instances.kavin.rocks/")
+        req4.add_header("User-Agent", "Mozilla/5.0")
+        with urlopen(req4, timeout=10) as resp4:
+            instances = json_mod.loads(resp4.read().decode())
+        results["6_piped_instances_api"] = f"OK - {len(instances)} instances found"
+    except Exception as e:
+        results["6_piped_instances_api"] = f"FAIL - {str(e)[:100]}"
+
+    return results
