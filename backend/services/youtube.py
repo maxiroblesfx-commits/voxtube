@@ -100,68 +100,74 @@ def extract_subtitles(url: str, job_id: str) -> dict:
     video_id = validate_youtube_url(url)
     
     from pytubefix import YouTube
-    try:
-        yt = YouTube(url, client='WEB')
-        
-        title = yt.title or "Sin título"
-        thumbnail = yt.thumbnail_url or _get_thumbnail(video_id)
-        duration = yt.length or 0
-
-        # Verificar duración
-        if duration > MAX_VIDEO_DURATION_SECONDS:
-            raise YouTubeError(
-                f"El video dura {duration // 60}:{duration % 60:02d} min. "
-                f"Máximo permitido: {MAX_VIDEO_DURATION_SECONDS // 60} min."
-            )
-
-        if not yt.captions:
-            raise YouTubeError(
-                "Este video no tiene subtítulos disponibles. "
-                "Probá con otro video que tenga subtítulos o CC activados."
-            )
+    
+    clients = ['ANDROID', 'TV_EMBED', 'ANDROID_VR', 'WEB']
+    last_error = "Error desconocido"
+    
+    for client in clients:
+        try:
+            print(f"[YouTube] Probando extracción de subtítulos con client='{client}'...")
+            yt = YouTube(url, client=client)
             
-        print(f"[YouTube] Captions disponibles: {list(yt.captions.keys())}")
+            title = yt.title or "Sin título"
+            thumbnail = yt.thumbnail_url or _get_thumbnail(video_id)
+            duration = yt.length or 0
 
-        # Priorizar: auto-generated inglés primero (más preciso), luego español, etc
-        best_cap = None
-        detected_lang = "en"
-        
-        # Buscar en orden de preferencia
-        prefs = ['a.en', 'en', 'a.es', 'es']
-        for pref in prefs:
-            if pref in yt.captions:
-                best_cap = yt.captions[pref]
-                detected_lang = pref.replace('a.', '')
-                break
+            # Verificar duración
+            if duration > MAX_VIDEO_DURATION_SECONDS:
+                raise YouTubeError(
+                    f"El video dura {duration // 60}:{duration % 60:02d} min. "
+                    f"Máximo permitido: {MAX_VIDEO_DURATION_SECONDS // 60} min."
+                )
+
+            if not yt.captions:
+                last_error = f"Client {client}: Este video no tiene subtítulos disponibles o no se pudieron extraer."
+                continue
                 
-        # Si no encontramos preferidos, tomamos el primero
-        if best_cap is None:
-            first_key = list(yt.captions.keys())[0]
-            best_cap = yt.captions[first_key]
-            detected_lang = first_key.replace('a.', '')[:2] # truncar 'en-GB' a 'en'
+            print(f"[YouTube] Captions disponibles ({client}): {list(yt.captions.keys())}")
 
-        print(f"[YouTube] Seleccionado caption: {best_cap.code}")
-        
-        # Generar texto SRT
-        srt_text = best_cap.generate_srt_captions()
-        
-        # Parsear a segmentos
-        segments = _parse_srt(srt_text)
-        if not segments:
-            raise YouTubeError("Los subtítulos están vacíos o no se pudieron leer.")
+            # Priorizar: auto-generated inglés primero, luego español, etc
+            best_cap = None
+            detected_lang = "en"
+            
+            prefs = ['a.en', 'en', 'a.es', 'es']
+            for pref in prefs:
+                if pref in yt.captions:
+                    best_cap = yt.captions[pref]
+                    detected_lang = pref.replace('a.', '')
+                    break
+                    
+            if best_cap is None:
+                first_key = list(yt.captions.keys())[0]
+                best_cap = yt.captions[first_key]
+                detected_lang = first_key.replace('a.', '')[:2]
 
-        print(f"[YouTube] ✓ Subtítulos extraídos: {len(segments)} segmentos, idioma base: {detected_lang}")
-        
-        return {
-            "segments": segments,
-            "detected_lang": detected_lang,
-            "title": title,
-            "thumbnail": thumbnail,
-            "duration": duration,
-            "video_id": video_id,
-        }
+            print(f"[YouTube] Seleccionado caption: {best_cap.code}")
+            srt_text = best_cap.generate_srt_captions()
+            segments = _parse_srt(srt_text)
+            
+            if not segments:
+                last_error = f"Client {client}: Los subtítulos están vacíos."
+                continue
 
-    except YouTubeError:
-        raise
-    except Exception as e:
-        raise YouTubeError(f"Error interno al obtener subtítulos: {str(e)}")
+            print(f"[YouTube] ✓ Subtítulos extraídos ({client}): {len(segments)} segmentos, idioma: {detected_lang}")
+            
+            return {
+                "segments": segments,
+                "detected_lang": detected_lang,
+                "title": title,
+                "thumbnail": thumbnail,
+                "duration": duration,
+                "video_id": video_id,
+            }
+
+        except YouTubeError as e:
+            if "dura" in str(e).lower():
+                raise e # Propagate length error
+            last_error = str(e)
+            continue
+        except Exception as e:
+            last_error = f"Client {client} falló: {str(e)}"
+            continue
+
+    raise YouTubeError(f"No se pudieron extraer los subtítulos. Último error: {last_error}")
