@@ -59,43 +59,44 @@ def _update_job(job_id: str, **kwargs) -> None:
 def _process_translation(job_id: str, url: str, target_lang: str, gender: str) -> None:
     """Pipeline completo de traducción (se ejecuta en un thread)."""
     try:
-        # ── Paso 1: Descargar audio ──
+        # ── Paso 1: Extraer subtítulos del video ──
         _update_job(
             job_id,
             status=JobStep.DOWNLOADING,
             progress=10,
-            step_label="Descargando audio del video...",
+            step_label="Obteniendo subtítulos del video...",
         )
-        from services.youtube import extract_audio, YouTubeError
+        from services.youtube import extract_subtitles, YouTubeError
         try:
-            video_info = extract_audio(url, job_id)
+            subtitle_info = extract_subtitles(url, job_id)
         except YouTubeError as e:
             _update_job(job_id, status=JobStep.FAILED, error=str(e))
             return
 
+        segments = subtitle_info["segments"]
+        detected_lang = subtitle_info["detected_lang"]
+
         _update_job(
             job_id,
-            video_title=video_info["title"],
-            video_thumbnail=video_info["thumbnail"],
-            video_duration=video_info["duration"],
+            video_title=subtitle_info["title"],
+            video_thumbnail=subtitle_info["thumbnail"],
+            video_duration=subtitle_info["duration"],
             progress=25,
         )
 
-        # ── Paso 2: Transcribir ──
+        # ── Paso 2: Subtítulos ya obtenidos (no se necesita Whisper) ──
         _update_job(
             job_id,
             status=JobStep.TRANSCRIBING,
-            progress=30,
-            step_label="Transcribiendo audio...",
+            progress=45,
+            step_label="Subtítulos extraídos correctamente",
         )
-        from services.transcriber import transcribe
-        segments, detected_lang = transcribe(video_info["audio_path"])
 
         if not segments:
             _update_job(
                 job_id,
                 status=JobStep.FAILED,
-                error="No se pudo detectar habla en el video.",
+                error="No se encontraron subtítulos en el video.",
             )
             return
 
@@ -135,7 +136,7 @@ def _process_translation(job_id: str, url: str, target_lang: str, gender: str) -
             step_label="Mezclando audio final...",
         )
         from services.audio_mixer import mix_audio
-        audio_path = mix_audio(tts_results, video_info["duration"], job_id)
+        audio_path = mix_audio(tts_results, subtitle_info["duration"], job_id)
 
         # ── Completado ──
         _update_job(
@@ -301,14 +302,12 @@ def debug_download():
     except Exception as e:
         results["5_youtube_oembed"] = f"FAIL - {str(e)[:100]}"
 
-    # Test 6: ¿Podemos llegar a las instancias dinámicas de Piped?
+    # Test 7: ¿FFmpeg está disponible?
     try:
-        req4 = Request("https://piped-instances.kavin.rocks/")
-        req4.add_header("User-Agent", "Mozilla/5.0")
-        with urlopen(req4, timeout=10) as resp4:
-            instances = json_mod.loads(resp4.read().decode())
-        results["6_piped_instances_api"] = f"OK - {len(instances)} instances found"
+        import subprocess
+        res = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
+        results["7_ffmpeg_installed"] = f"OK - {res.stdout.splitlines()[0]}"
     except Exception as e:
-        results["6_piped_instances_api"] = f"FAIL - {str(e)[:100]}"
+        results["7_ffmpeg_installed"] = f"FAIL - {str(e)[:100]}"
 
     return results
