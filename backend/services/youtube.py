@@ -215,43 +215,50 @@ def _try_piped(video_id: str, output_dir: Path) -> dict | None:
 # ─── Fallback: pytubefix ────────────────────────────────
 
 def _try_pytubefix(url: str, video_id: str, output_dir: Path) -> dict | None:
-    """Último recurso: pytubefix directo a YouTube."""
-    try:
-        print("  [pytubefix] Probando...")
-        from pytubefix import YouTube
+    """Último recurso: pytubefix directo a YouTube probando varios clientes."""
+    from pytubefix import YouTube
+    
+    last_error = "Error desconocido"
+    clients = ["WEB", "WEB_CREATOR", "ANDROID", "ANDROID_VR", "ANDROID_MUSIC", "TV_EMBED", "IOS"]
+    
+    for client in clients:
+        try:
+            print(f"  [pytubefix] Probando client={client}...")
+            yt = YouTube(url, client=client)
 
-        yt = YouTube(url)
+            duration = yt.length or 0
+            if duration > MAX_VIDEO_DURATION_SECONDS:
+                raise YouTubeError(
+                    f"El video dura {duration // 60}:{duration % 60:02d} min. "
+                    f"Máximo permitido: {MAX_VIDEO_DURATION_SECONDS // 60} min."
+                )
 
-        duration = yt.length or 0
-        if duration > MAX_VIDEO_DURATION_SECONDS:
-            raise YouTubeError(
-                f"El video dura {duration // 60}:{duration % 60:02d} min. "
-                f"Máximo permitido: {MAX_VIDEO_DURATION_SECONDS // 60} min."
-            )
+            audio_stream = yt.streams.get_audio_only()
+            if not audio_stream:
+                last_error = f"Client {client}: Sin stream de audio"
+                continue
 
-        audio_stream = yt.streams.get_audio_only()
-        if not audio_stream:
-            print("  [pytubefix] No se encontró stream de audio")
-            return None
+            path = audio_stream.download(output_path=str(output_dir), filename="audio.mp3")
 
-        path = audio_stream.download(output_path=str(output_dir), filename="audio.mp3")
+            if Path(path).exists() and Path(path).stat().st_size > 1000:
+                print(f"  [pytubefix] ✓ Éxito con {client}: {yt.title}")
+                return {
+                    "audio_path": path,
+                    "title": yt.title,
+                    "thumbnail": yt.thumbnail_url,
+                    "duration": duration,
+                    "video_id": video_id,
+                }
+            else:
+                last_error = f"Client {client}: Archivo descargado muy pequeño o corrupto"
+                
+        except YouTubeError:
+            raise
+        except Exception as e:
+            last_error = f"Client {client} falló: {e}"
+            continue
 
-        if Path(path).exists() and Path(path).stat().st_size > 1000:
-            print(f"  [pytubefix] ✓ Éxito: {yt.title}")
-            return {
-                "audio_path": path,
-                "title": yt.title,
-                "thumbnail": yt.thumbnail_url,
-                "duration": duration,
-                "video_id": video_id,
-            }
-        return None
-
-    except YouTubeError:
-        raise
-    except Exception as e:
-        print(f"  [pytubefix] Falló: {e}")
-        return None
+    raise YouTubeError(f"Ningún cliente funcionó. Último error: {last_error}")
 
 
 # ─── Main Entry Point ───────────────────────────────────
