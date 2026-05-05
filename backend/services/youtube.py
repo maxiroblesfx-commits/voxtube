@@ -138,9 +138,9 @@ def _try_piped(video_id: str, output_dir: Path) -> dict | None:
     instances = _get_piped_instances()
 
     if not instances:
-        print("  [Piped] No hay instancias disponibles")
-        return None
+        raise YouTubeError("[Piped] No hay instancias disponibles")
 
+    last_error = "Error desconocido"
     for instance in instances:
         try:
             print(f"  [Piped] Probando {instance}...")
@@ -161,13 +161,14 @@ def _try_piped(video_id: str, output_dir: Path) -> dict | None:
             # Buscar streams de audio
             audio_streams = data.get("audioStreams", [])
             if not audio_streams:
-                print(f"  [Piped] {instance}: sin audio streams")
+                last_error = f"{instance}: sin audio streams"
                 continue
 
             # Ordenar por bitrate (mejor calidad primero)
             audio_streams.sort(key=lambda s: s.get("bitrate", 0), reverse=True)
 
             # Intentar descargar el mejor stream disponible
+            stream_success = False
             for stream in audio_streams[:3]:  # probar los 3 mejores
                 stream_url = stream.get("url")
                 if not stream_url:
@@ -178,13 +179,13 @@ def _try_piped(video_id: str, output_dir: Path) -> dict | None:
 
                 raw_path = output_dir / "audio_raw"
                 if not _download_file(stream_url, raw_path):
-                    print(f"  [Piped] Descarga falló, probando siguiente stream...")
+                    last_error = f"{instance}: Descarga de archivo HTTP falló"
                     continue
 
                 # Convertir a MP3 con FFmpeg
                 mp3_path = output_dir / "audio.mp3"
                 if not _convert_to_mp3(raw_path, mp3_path):
-                    print(f"  [Piped] Conversión FFmpeg falló")
+                    last_error = f"{instance}: FFmpeg no pudo convertir el audio"
                     continue
 
                 # Limpiar archivo temporal
@@ -198,16 +199,17 @@ def _try_piped(video_id: str, output_dir: Path) -> dict | None:
                     "duration": duration,
                     "video_id": video_id,
                 }
-
-            print(f"  [Piped] {instance}: ningún stream se pudo descargar")
+                
+            if not stream_success:
+                continue
 
         except YouTubeError:
             raise
         except Exception as e:
-            print(f"  [Piped] {instance} falló: {e}")
+            last_error = f"{instance} falló: {e}"
             continue
 
-    return None
+    raise YouTubeError(last_error)
 
 
 # ─── Fallback: pytubefix ────────────────────────────────
@@ -263,20 +265,34 @@ def extract_audio(url: str, job_id: str) -> dict:
     output_dir = TEMP_DIR / job_id
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Strategy 1: Piped API (proxy, no requiere cookies)
-    print(f"[YouTube] Descargando video {video_id}...")
-    result = _try_piped(video_id, output_dir)
-    if result:
-        return result
+    strategies = [
+        ("Piped API", lambda: _try_piped(video_id, output_dir)),
+        ("pytubefix", lambda: _try_pytubefix(url, video_id, output_dir)),
+    ]
 
-    # Strategy 2: pytubefix (directo, puede fallar en cloud)
-    print("[YouTube] Piped falló, intentando pytubefix...")
-    result = _try_pytubefix(url, video_id, output_dir)
-    if result:
-        return result
+    errors = []
+    for name, strategy in strategies:
+        print(f"[YouTube] Intentando con {name}...")
+        try:
+            result = strategy()
+            if result:
+                # Completar metadata si falta
+                if result.get("title") in (None, "", "Video de YouTube", "Sin título"):
+                    meta = _get_metadata_oembed(video_id)
+                    result["title"] = meta["title"]
+                    result["thumbnail"] = meta["thumbnail"]
+                print(f"[YouTube] ✓ Descarga exitosa via {name}: {result['title']}")
+                return result
+            else:
+                errors.append(f"{name} devolvió None")
+        except YouTubeError as e:
+            errors.append(f"{name}: {str(e)}")
+            if "dura" in str(e).lower():
+                raise e
+        except Exception as e:
+            errors.append(f"{name}: {str(e)}")
+            continue
 
-    # Nada funcionó
     raise YouTubeError(
-        "No se pudo descargar el audio del video. "
-        "Intentá con otro video o esperá unos minutos."
+        f"No se pudo descargar el audio. Detalles: {' | '.join(errors)}"
     )
